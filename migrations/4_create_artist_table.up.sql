@@ -1,11 +1,11 @@
 CREATE TABLE artist(
-  id UUID UNIQUE,
-  name VARCHAR NOT NULL UNIQUE
+  id uuid UNIQUE,
+  name varchar NOT NULL UNIQUE
 );
 
 CREATE TABLE festival_artist(
-  id UUID UNIQUE,
-  festival_id UUID REFERENCES festival(id),
-  artist_id UUID REFERENCES artist(id)
+  id uuid UNIQUE,
+  festival_id uuid REFERENCES festival(id),
+  artist_id uuid REFERENCES artist(id)
 );
 

@@ -1,2 +1,2 @@
 ALTER TABLE festival
-  ADD COLUMN img_src VARCHAR;
+  ADD COLUMN img_src varchar;
