@@ -1,4 +1,0 @@
-CREATE TABLE festival(
-  id UUID UNIQUE,
-  name VARCHAR NOT NULL UNIQUE
-);
