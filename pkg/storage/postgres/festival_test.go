@@ -6,45 +6,37 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/golang-migrate/migrate/source/file"
-	_ "github.com/lib/pq"
 	"github.com/techmexdev/lineuplist"
 	"github.com/techmexdev/lineuplist/pkg/postgres"
 )
 
-func TestFestivalSave(t *testing.T) {
-	_, _, migrateDown := storeFestivals(t)
-	defer migrateDown()
-}
-
-func TestLoadAll(t *testing.T) {
+func TestListArtist(t *testing.T) {
 	ff, fStore, migrateDown := storeFestivals(t)
 	defer migrateDown()
 
-	storedFf, err := fStore.LoadAll()
+	storedFf, err := fStore.List()
 	if err != nil {
 		t.Fatalf("error loading all festivals: %s", err)
 	}
 
 	for i := range storedFf {
-		log.Printf("%#v", storedFf[i])
 		if storedFf[i].Name != ff[i].Name || !lineupEqual(storedFf[i].Lineup, ff[i].Lineup) {
 			log.Fatalf("error comparing stored festivals: have %v, want %v", storedFf[i], ff[i])
 		}
 	}
 }
 
-func TestLoad(t *testing.T) {
+func TestReadFestival(t *testing.T) {
 	ff, fStore, migrateDown := storeFestivals(t)
 	defer migrateDown()
 
 	acl, err := fStore.Load("Austin City Limits")
 	if err != nil {
-		t.Fatalf("error loading festival: %s", err)
+		t.Fatalf("error reading festival: %s", err)
 	}
 
 	if !lineupEqual(acl.Lineup, ff[0].Lineup) {
-		t.Fatalf("error loading festival: have %v, want %v", acl.Lineup, ff[0].Lineup)
+		t.Fatalf("error reading festival: have %v, want %v", acl.Lineup, ff[0].Lineup)
 	}
 }
 
@@ -71,19 +63,28 @@ func TestFromArtist(t *testing.T) {
 	}
 }
 
+/* Methods for storing festivals */
+
 func storeFestivals(t *testing.T) (ff []lineuplist.Festival, fs lineuplist.FestivalStorage, migrateDown func()) {
 	ff = []lineuplist.Festival{
 		{
 			Name:      "Austin City Limits",
 			StartDate: time.Now(), EndDate: time.Now(),
 			Country: "United States", State: "Tx", City: "Austin",
-			Lineup: []lineuplist.ArtistPreview{{Name: "Red Hot Chilli Peppers"}, {Name: "Gorillaz"}, {Name: "Jay-Z"}},
+			Lineup: []lineuplist.Artist{
+				{Name: "Red Hot Chilli Peppers"},
+				{Name: "Gorillaz"}, {Name: "Jay-Z"}
+			},
 		},
 		{
 			Name:      "Levitation",
 			StartDate: time.Now(), EndDate: time.Now(),
 			Country: "United States", State: "Tx", City: "Austin",
-			Lineup: []lineuplist.ArtistPreview{{Name: "Gorillaz"}, {Name: "The Octopus Project"}, {Name: "Ariel Pink"}},
+			Lineup: []lineuplist.Artist{
+				{Name: "Gorillaz"},
+				{Name: "The Octopus Project"},
+				{Name: "Ariel Pink"}
+			},
 		},
 	}
 
@@ -92,7 +93,7 @@ func storeFestivals(t *testing.T) (ff []lineuplist.Festival, fs lineuplist.Festi
 	fStore := postgres.NewFestivalStorage(os.Getenv("PG_TEST_DSN"))
 
 	for _, f := range ff {
-		_, err := fStore.Save(f)
+		_, err := fStore.Create(f)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +104,13 @@ func storeFestivals(t *testing.T) (ff []lineuplist.Festival, fs lineuplist.Festi
 	}
 }
 
-func lineupEqual(a, b []lineuplist.ArtistPreview) bool {
+/* 
+  Methods for testing 
+  TODO: This looks like it's being reused in multiple
+  files, maybe we should export it. 
+*/
+
+func lineupEqual(a, b []lineuplist.Artist) bool {
 	if len(a) != len(b) {
 		return false
 	}

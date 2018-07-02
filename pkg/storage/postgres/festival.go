@@ -1,127 +1,104 @@
 package postgres
 
 import (
-	"log"
+	"fmt"
 
+	"../../../../lineuplist"
 	"github.com/jmoiron/sqlx"
 	"github.com/satori/go.uuid"
-	"github.com/techmexdev/lineuplist"
 )
 
-// NewFestivalStorage returns a FestivalStorage postgres implementation.
+/* NewFestivalStorage returns a FestivalStorage postgres implementation */
 func NewFestivalStorage(dsn string) *FestivalStorage {
 	return &FestivalStorage{sqlx.MustConnect("postgres", dsn)}
 }
 
-// FestivalStorage implements lineuplist.FestivalStorage
+/* FestivalStorage implements lineuplist.FestivalStorage */
 type FestivalStorage struct {
 	*sqlx.DB
 }
 
-// LoadAll returns all stored festivals
-func (db *FestivalStorage) LoadAll(category string) ([]lineuplist.Festival, error) {
-	var ff []lineuplist.Festival
-	orderBy := "name"
-
-	if category == "upcoming" {
-		orderBy = "start_date"
-	}
-	err := db.Select(&ff, "SELECT name, img_src, start_date, end_date, country, state, city FROM festival ORDER BY "+orderBy)
-	if err != nil {
-		return []lineuplist.Festival{}, err
-	}
-
-	apStore := ArtistPreviewStorage{db.DB}
-	for i := range ff {
-		aps, err := apStore.FromFestival(ff[i].Name)
-		if err != nil {
-			return []lineuplist.Festival{}, err
-		}
-		ff[i].Lineup = aps
-	}
-
-	return ff, nil
-}
-
-// Load returns all stored festivals
-// with that name.
-func (db *FestivalStorage) Load(name string) (lineuplist.Festival, error) {
-	var f lineuplist.Festival
-
-	log.Println("festivalstorage.load - name: ", name)
-	err := db.Get(&f, "SELECT * FROM festival WHERE LOWER(name) = LOWER($1)", name)
-	if err != nil {
-		return lineuplist.Festival{}, err
-	}
-
-	apStore := &ArtistPreviewStorage{db.DB}
-	aps, err := apStore.FromFestival(f.Name)
-	if err != nil {
-		return lineuplist.Festival{}, err
-	}
-
-	f.Lineup = aps
-
-	return f, nil
-}
-
-// Save inserts the festival in the database if it doesn't exist,
-// and retrieves it if it does.
-func (db *FestivalStorage) Save(f lineuplist.Festival) (lineuplist.Festival, error) {
-	q := `INSERT INTO festival(id, name, start_date, end_date, country, state, city)
-		VALUES($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (name) DO UPDATE SET name=EXCLUDED.name`
-
+/* Create creates and writes a new festival to db */
+func (db *FestivalStorage) Create(f lineuplist.Festival) (lineuplist.Festival, error) {
 	id, err := uuid.NewV4()
 	f.ID = id.String()
 	if err != nil {
-		return lineuplist.Festival{}, err
+		return lineuplist.Festival{}, fmt.Errorf("failed creating festival id: %s", err)
 	}
-
-	_, err = db.Exec(q, f.ID, f.Name, f.StartDate, f.EndDate, f.Country, f.State, f.City)
+	_, err = db.Exec("INSERT INTO festival(id, name) VALUES($1, $2)", f.ID, f.Name)
 	if err != nil {
-		return lineuplist.Festival{}, err
+		return lineuplist.Festival{}, fmt.Errorf("failed inserting festival %#v", f.ID, f.Name)
 	}
-
-	apStore := ArtistPreviewStorage{db.DB}
-
-	for _, ap := range f.Lineup {
-		var storedAp lineuplist.ArtistPreview
-
-		storedAp, err = apStore.Load(ap.Name)
-		if err != nil {
-			storedAp, err = apStore.Save(ap)
-			if err != nil {
-				return lineuplist.Festival{}, err
-			}
-		}
-
-		festArtID, err := uuid.NewV4()
-		if err != nil {
-			return lineuplist.Festival{}, err
-		}
-
-		_, err = db.Exec(`INSERT INTO festival_artist(id, festival_id, artist_id)
-			VALUES($1, $2, $3)`, festArtID.String(), f.ID, storedAp.ID)
-		if err != nil {
-			return lineuplist.Festival{}, err
-		}
-	}
-
 	return f, nil
 }
 
-func (db *FestivalStorage) FromArtist(artist string) ([]lineuplist.Festival, error) {
-	var ff []lineuplist.Festival
-
-	q := `SELECT name, start_date, end_date, country, state, city
-		FROM festival WHERE id IN (
-  		SELECT festival_id FROM festival_artist WHERE artist_id=(
-  			SELECT id FROM artist WHERE name=$1))`
-	err := db.Select(&ff, q, artist)
+/* Read returns the first stored festival in db given provided name */
+func (db *FestivalStorage) Read(name string) (lineuplist.Festival, error) {
+	f := lineuplist.Festival{}
+	err := db.Get(&f, "SELECT * FROM festival WHERE name = $1", name)
 	if err != nil {
-		return []lineuplist.Festival{}, err
+		return lineuplist.Festival{}, fmt.Errorf("festival with name: %s not found: %s", name, err)
 	}
+	as, err := db.readArtists(f.Name)
+	if err != nil {
+		fmt.Errorf("failed reading festival artists from db: %s", err)
+	}
+	f.Lineup = as
+	return f, nil
+}
 
-	return ff, nil
+/* Update updates a festival and returns it if exists in db */
+func (db *FestivalStorage) Update(f lineuplist.Festival) (lineuplist.Festival, error) {
+	q := "INSERT INTO festival(id, name) VALUES($1, $2) ON CONFLICT DO NOTHING"
+	_, err := db.Exec(q, f.ID, f.Name)
+	if err != nil {
+		return lineuplist.Festival{}, fmt.Errorf("failed updating festival %s", err)
+	}
+	db.Get(&f, "SELECT * FROM festival WHERE name = $1", f.Name)
+	return f, nil
+}
+
+/* Delete removes a festival from db if exists */
+func (db *FestivalStorage) Delete(name string) error {
+	_, err := db.Exec("DELETE FROM festivals WHERE name = $1", name)
+	if err != nil {
+		return fmt.Errorf("failed deleating festival from db: %s", err)
+	}
+	return nil
+}
+
+/* List returns a list of all festivals in db */
+func (db *FestivalStorage) List() ([]lineuplist.Festival, error) {
+	fs := []lineuplist.Festival{}
+	err := db.Get(&fs, "SELECT * FROM festival")
+	if err != nil {
+		return []lineuplist.Festival{}, fmt.Errorf("failed reading festivals from db: %s", err)
+	}
+	for i, f := range fs {
+		a, err := db.readArtists(f.Name)
+		if err != nil {
+			fmt.Errorf("failed reading festival artists from db:%s", err)
+		}
+		fs[i].Lineup = a
+	}
+	return fs, nil
+}
+
+/* ReadArtists returns list of artists from associated festival */
+func (db *FestivalStorage) readArtists(festivalName string) ([]lineuplist.ArtistPreview, error) {
+	as := []lineuplist.ArtistPreview{}
+	q := `SELECT * FROM festival
+		WHERE id = (
+			SELECT id FROM festival_artist	
+			WHERE artist_id = (
+				SELECT id FROM artist
+				WHERE name = $1
+			)
+		)`
+
+	err := db.Get(&as, q, festivalName)
+	if err != nil {
+		return []lineuplist.ArtistPreview{}, err
+	}
+	return as, nil
 }

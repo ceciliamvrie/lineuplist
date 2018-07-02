@@ -2,7 +2,6 @@ package memo
 
 import "../../../../lineuplist"
 
-//
 type storage struct {
 	artists []lineuplist.Artist
 	festivals []lineuplist.Festival

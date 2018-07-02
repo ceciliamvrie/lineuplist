@@ -1,8 +1,8 @@
 ALTER TABLE festival
-  ADD COLUMN date varchar,
+  ADD COLUMN date VARCHAR,
   DROP COLUMN start_date RESTRICT,
   DROP COLUMN end_date RESTRICT,
-  ADD COLUMN location varchar,
+  ADD COLUMN location VARCHAR,
   DROP COLUMN country RESTRICT,
   DROP COLUMN state RESTRICT,
   DROP COLUMN city RESTRICT;

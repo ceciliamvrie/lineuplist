@@ -11,28 +11,33 @@ import (
 	"github.com/techmexdev/lineuplist/pkg/postgres"
 )
 
-func TestLoadAndLoadAll(t *testing.T) {
-	aa, aStore, migrateDown := storeArtists(t)
+func TestListArtist(t *testing.T) {
+    _, aStore, migrateDown := storeArtists(t)
 	defer migrateDown()
-
-	storedA, err := aStore.LoadAll()
+	
+	storedA, err := aStore.List()
 	if err != nil {
-		t.Fatalf("error loading all artists: %s", err)
-	}
+		t.Fatalf("error listing all artists: %s", err)
+	} 
 
 	for i := range storedA {
 		if storedA[i].Name != aa[i].Name {
 			t.Fatalf("error comparing stored artists: have %v, want %v", storedA[i], aa[i])
 		}
 	}
+}
 
-	gol, err := aStore.Load("Gorillaz")
+func TestReadArist(t *testing.T) {
+	aa, aStore, migrateDown := storeArtists(t)
+	defer migrateDown()
+
+	na, err := aStore.Read("Gorillaz")
 	if err != nil {
-		t.Fatalf("error loading artist: %s", err)
+		t.Fatalf("error reading artist: %s", err)
 	}
 
-	if gol.Name != "Gorillaz" {
-		t.Fatalf("error loading artist: have %v, want %v", gol, aa[1])
+	if na.Name != "Gorillaz" {
+		t.Fatalf("error reading artist: have %v, want %v", na, aa[1])
 	}
 }
 
@@ -42,16 +47,22 @@ func TestArtistsFestivals(t *testing.T) {
 
 	aStore := postgres.NewArtistStorage(os.Getenv("PG_TEST_DSN"))
 
-	gol, err := aStore.Load("Gorillaz")
+	na, err := aStore.Read("Gorillaz")
 	if err != nil {
-		t.Fatalf("error loading artist: %s", err)
+		t.Fatalf("error reading artist: %s", err)
 	}
 
-	expFf := []lineuplist.FestivalPreview{{Name: "Austin City Limits"}, {Name: "Levitation"}}
-	if gol.Festivals[0].Name != expFf[0].Name || gol.Festivals[1].Name != expFf[1].Name {
-		t.Fatalf("error retrieving artist's festivals: have %v, want %v", gol.Festivals, expFf)
+	expFf := []lineuplist.Festival{
+		{Name: "Austin City Limits"},
+		{Name: "Levitation"}
+	}
+
+	if na.Festivals[0].Name != expFf[0].Name || na.Festivals[1].Name != expFf[1].Name {
+		t.Fatalf("error retrieving artist's festivals: have %v, want %v", na.Festivals, expFf)
 	}
 }
+
+/* Mock methods for storing artists */
 
 func storeArtists(t *testing.T) (aa []lineuplist.Artist, as lineuplist.ArtistStorage, migrateDown func()) {
 	aa = []lineuplist.Artist{
@@ -64,9 +75,9 @@ func storeArtists(t *testing.T) (aa []lineuplist.Artist, as lineuplist.ArtistSto
 	aStore := postgres.NewArtistStorage(os.Getenv("PG_TEST_DSN"))
 
 	for _, a := range aa {
-		_, err := aStore.Save(a)
+		_, err := aStore.Create(a)
 		if err != nil {
-			t.Fatalf("error saving artist %v: %s", a, err)
+			t.Fatalf("error creating artist %v: %s", a, err)
 		}
 	}
 
@@ -79,13 +90,13 @@ func storeFestivals(t *testing.T) (ff []lineuplist.Festival, fs lineuplist.Festi
 			Name:      "Austin City Limits",
 			StartDate: time.Now(), EndDate: time.Now(),
 			Country: "United States", State: "Tx", City: "Austin",
-			Lineup: []lineuplist.ArtistPreview{{Name: "Red Hot Chilli Peppers"}, {Name: "Gorillaz"}, {Name: "Jay-Z"}},
+			Lineup: []lineuplist.Artist{{Name: "Red Hot Chilli Peppers"}, {Name: "Gorillaz"}, {Name: "Jay-Z"}},
 		},
 		{
 			Name:      "Levitation",
 			StartDate: time.Now(), EndDate: time.Now(),
 			Country: "United States", State: "Tx", City: "Austin",
-			Lineup: []lineuplist.ArtistPreview{{Name: "Gorillaz"}, {Name: "The Octopus Project"}, {Name: "Ariel Pink"}},
+			Lineup: []lineuplist.Artist{{Name: "Gorillaz"}, {Name: "The Octopus Project"}, {Name: "Ariel Pink"}},
 		},
 	}
 
@@ -105,6 +116,8 @@ func storeFestivals(t *testing.T) (ff []lineuplist.Festival, fs lineuplist.Festi
 			postgres.MigrateDown("file://../../migrations", os.Getenv("PG_TEST_DSN"))
 		}
 }
+
+/* Methods for testing */
 
 func lineupEqual(a, b []lineuplist.Artist) bool {
 	if len(a) != len(b) {
